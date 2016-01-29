@@ -23,6 +23,10 @@
 
 	<%
 	String autoRememberMe = CookieKeys.getCookie(request, CookieKeys.REMEMBER_ME);
+	//-------- RIVET CUSTOM CODE --------
+	String screenName = UserLocalServiceUtil.getUser(PortalUtil.getUserId(request)).getScreenName();
+	String rivetToken = "rivetFormSaver_" + screenName;
+	//-------- RIVET CUSTOM CODE --------
 	%>
 
 	<c:if test="<%= Validator.isNull(autoRememberMe) %>">
@@ -33,7 +37,9 @@
 		int sessionTimeoutWarning = PropsValues.SESSION_TIMEOUT_WARNING;
 
 		boolean sessionRedirectOnExpire = PropsValues.SESSION_TIMEOUT_REDIRECT_ON_EXPIRE;
-		String sessionRedirectUrl = themeDisplay.getURLHome();
+		//-------- RIVET CUSTOM CODE --------
+		//String sessionRedirectUrl = themeDisplay.getURLHome();
+		String sessionRedirectUrl = themeDisplay.getPortalURL() + themeDisplay.getURLCurrent();
 
 		long companyId = themeDisplay.getCompanyId();
 
@@ -65,14 +71,14 @@
 			
 			//-------- RIVET CUSTOM CODE --------
 			function saveItem(item, value) {
-				localStorage.setItem('rivetFormSaver' + item, value);
+				localStorage.setItem('<%= rivetToken %>' + item, value);
 			}
 			
 			function findItems() {
 				var items = [];
 				for(key in localStorage) {
-					if(key.indexOf('rivetFormSaver') != -1) {
-						items.push({ 'name': key.replace('rivetFormSaver',''), 'value': localStorage.getItem(key) });
+					if(key.indexOf('<%= rivetToken %>') != -1) {
+						items.push({ 'name': key.replace('<%= rivetToken %>',''), 'value': localStorage.getItem(key) });
 						localStorage.removeItem(key);
 					}
 				}
@@ -80,7 +86,7 @@
 			}
 		
 			function checkFormSaverData() {
-				return localStorage != undefined && localStorage.rivetFormSaver != undefined;
+				return localStorage != undefined && localStorage.<%= rivetToken %> != undefined;
 			}
 			
 			function saveForms() {
@@ -126,14 +132,14 @@
 			Liferay.Session.on('sessionStateChange', function(state) { 
 				var currentState = state.newVal;
 				if(currentState == "warned" && localStorage != undefined) {
-					localStorage.rivetFormSaver = true;
+					localStorage.<%= rivetToken %> = true;
 					saveForms();
 				}
 			});
 			
 			A.ready(function(A) {
 				if(checkFormSaverData()) {
-					localStorage.removeItem("rivetFormSaver");
+					localStorage.removeItem('<%= rivetToken %>');
 					restoreForms();
 				}
 			});
