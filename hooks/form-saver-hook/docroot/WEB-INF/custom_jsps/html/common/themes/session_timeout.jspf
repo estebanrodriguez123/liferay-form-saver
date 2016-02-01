@@ -1,38 +1,35 @@
 <%--
-/**
- * Copyright (c) 2000-2013 Liferay, Inc. All rights reserved.
- *
- * The contents of this file are subject to the terms of the Liferay Enterprise
- * Subscription License ("License"). You may not use this file except in
- * compliance with the License. You can obtain a copy of the License by
- * contacting Liferay, Inc. See the License for the specific language governing
- * permissions and limitations under the License, including but not limited to
- * distribution rights of the Software.
- *
- *
- *
- */
+/*
+* Copyright (C) 2005-2016 Rivet Logic Corporation.
+*
+* This program is free software; you can redistribute it and/or
+* modify it under the terms of the GNU General Public License
+* as published by the Free Software Foundation; version 2
+* of the License.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with this program; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor,
+* Boston, MA 02110-1301, USA.
+*/
 --%>
 
-<%@ page import="com.liferay.portal.kernel.util.PropsKeys" %>
-<%@ page import="com.liferay.portal.kernel.util.GetterUtil" %>
-
-<c:if test="<%= !PropsValues.SESSION_DISABLED %>">
+<c:if test="<%= themeDisplay.isSignedIn() && !PropsValues.SESSION_DISABLED %>">
 
 	<%
 	String autoRememberMe = CookieKeys.getCookie(request, CookieKeys.REMEMBER_ME);
-	
-	String screenName = "";
-	Long cookieExpires = 2 * 60 * 60 * 1000L;
-	
-	if(themeDisplay.isSignedIn()) {
-		screenName = UserLocalServiceUtil.getUser(PortalUtil.getUserId(request)).getScreenName();
-		cookieExpires = PrefsPropsUtil.getLong(themeDisplay.getCompanyId(), "rivetlogic.formsaver.expires", 
-                GetterUtil.getLong(PropsUtil.get("rivetlogic.formsaver.expires")));
-	}
+	//-------- RIVET CUSTOM CODE --------
+	String screenName = UserLocalServiceUtil.getUser(PortalUtil.getUserId(request)).getScreenName();
+	String rivetToken = "rivetFormSaver_" + screenName;
+	//-------- RIVET CUSTOM CODE --------
 	%>
 
-	<c:if test="<%= !themeDisplay.isSignedIn() || Validator.isNull(autoRememberMe) %>">
+	<c:if test="<%= Validator.isNull(autoRememberMe) %>">
 
 		<%
 		int sessionTimeout = PropsValues.SESSION_TIMEOUT;
@@ -40,6 +37,8 @@
 		int sessionTimeoutWarning = PropsValues.SESSION_TIMEOUT_WARNING;
 
 		boolean sessionRedirectOnExpire = PropsValues.SESSION_TIMEOUT_REDIRECT_ON_EXPIRE;
+		//-------- RIVET CUSTOM CODE --------
+		//String sessionRedirectUrl = themeDisplay.getURLHome();
 		String sessionRedirectUrl = themeDisplay.getPortalURL() + themeDisplay.getURLCurrent();
 
 		long companyId = themeDisplay.getCompanyId();
@@ -60,57 +59,9 @@
 
 		<aui:script use="liferay-session">
 		
-			function appendCookie(name, value, cookie) {
-			    if(cookie.length > 0) cookie += "&";
-			    return cookie + name + "=" + value;
-			}
-			
-			function saveFormsToCookie() {
-			    var cookie = "";
-			    var A = AUI();
-			    var inputs = A.all("form input:not([type='hidden']),form textarea,form select");
-			    inputs.each(function(input){
-			        var value = input.attr("value");
-			        var id = input.attr("id");
-			        var type = input.attr("type");
-			        var name = input.attr("name");
-			        if(type == 'radio' || type == 'checkbox') {
-			        	if(input.attr('checked')) {
-			        		cookie = appendCookie(name, value, cookie);
-			        	}
-			        } else if(value) {
-			        	cookie = appendCookie(name, value, cookie);
-			        }
-			    });
-			    return cookie;
-			}
-			
-			function restoreFormsFromCookie(cookie) {
-			    var A = AUI();
-			    var fields = cookie.split("&")
-			    fields.forEach(function(field){
-			        var pair = field.split("=");
-			        var name = pair[0];
-			        var value = pair[1];
-			        var input = A.one("#" + name);
-			        if(input) {
-			        	if(input.attr("type") == "checkbox") {
-			        		input.attr("checked", true);
-			        	} else {
-			        		input.attr("value", value);
-			        	}
-			        } else {
-			       		var radio = A.one("input[name='"+name+"'][value='"+value+"']");
-			            if(radio) {
-			            	radio.attr("checked", true);
-			            }
-			        }
-			    });
-			}
-			
 			Liferay.Session = new Liferay.SessionBase(
 				{
-					autoExtend: <%= !themeDisplay.isSignedIn() || PropsValues.SESSION_TIMEOUT_AUTO_EXTEND %>,
+					autoExtend: <%= PropsValues.SESSION_TIMEOUT_AUTO_EXTEND %>,
 					sessionLength: <%= sessionTimeout %>,
 					redirectOnExpire: <%= sessionRedirectOnExpire %>,
 					redirectUrl: '<%= HtmlUtil.escapeJS(sessionRedirectUrl) %>',
@@ -118,39 +69,86 @@
 				}
 			);
 			
+			//-------- RIVET CUSTOM CODE --------
+			function saveItem(item, value) {
+				localStorage.setItem('<%= rivetToken %>' + item, value);
+			}
+			
+			function findItems() {
+				var items = [];
+				for(key in localStorage) {
+					if(key.indexOf('<%= rivetToken %>') != -1) {
+						items.push({ 'name': key.replace('<%= rivetToken %>',''), 'value': localStorage.getItem(key) });
+						localStorage.removeItem(key);
+					}
+				}
+				return items;
+			}
+		
+			function checkFormSaverData() {
+				return localStorage != undefined && localStorage.<%= rivetToken %> != undefined;
+			}
+			
+			function saveForms() {
+			    var inputs = A.all("input, textarea, select");
+			    inputs.each(function(input){
+			        var value = input.attr("value");
+			        var id = input.attr("id");
+			        var type = input.attr("type");
+			        var name = input.attr("name");
+			        if(id) {
+				        if(type == 'radio') {
+				        	if(input.attr('checked')) {
+				        		saveItem(name, value);
+				        	}
+				        } else if(type == 'checkbox') {
+				        	saveItem(id, input.attr('checked'));
+				        } else {
+				        	saveItem(id, value);
+				        }
+			        }
+			    });
+			}
+			
+			function restoreForms() {
+			    var fields = findItems();
+			    fields.forEach(function(field){
+			        var input = A.one("[id='" + field.name + "']");
+			        if(input) {
+			        	if(input.attr("type") == "checkbox") {
+			        		input.attr("checked", field.value == 'true');
+			        	} else {
+			        		input.attr("value", field.value);
+			        	}
+			        } else {
+			       		var radio = A.one("input[name='"+field.name+"'][value='"+field.value+"']");
+			            if(radio) {
+			            	radio.attr("checked", true);
+			            }
+			        }
+			    });
+			}
+			
 			Liferay.Session.on('sessionStateChange', function(state) { 
-				var A = AUI();
-				
 				var currentState = state.newVal;
-				var formData = "";
-				
-				if(currentState == "warned") {
-					var cookieBody = saveFormsToCookie();
-					var cookieName = '<%=screenName%>' + "_formSaver";
-					setCookie(cookieName, cookieBody);
+				if(currentState == "warned" && localStorage != undefined) {
+					localStorage.<%= rivetToken %> = true;
+					saveForms();
 				}
 			});
 			
-			<c:if test="<%= themeDisplay.isSignedIn() && sessionTimeoutWarning > 0 %>">
+			A.ready(function(A) {
+				if(checkFormSaverData()) {
+					localStorage.removeItem('<%= rivetToken %>');
+					restoreForms();
+				}
+			});
+			
+			//-------- RIVET CUSTOM CODE --------
+
+			<c:if test="<%= sessionTimeoutWarning > 0 %>">
 				Liferay.Session.plug(Liferay.SessionDisplay);
 			</c:if>
-			
-			function setCookie(cname, cvalue) {
-				var A = AUI();
-    			var date = new Date();
-    			date.setTime(date.getTime() + <%=cookieExpires%> * 60 * 1000);
-    			A.Cookie.set(cname, cvalue, { 'expires': date })
-			};
-			
-			AUI().ready(function(A){
-				var cookieName = '<%=screenName%>' + "_formSaver";
-				if(A.Cookie.exists(cookieName)) {
-					var cookieBody = A.Cookie.get(cookieName);
-					restoreFormsFromCookie(cookieBody);
-					A.Cookie.remove(cookieName);
-				}
-			});
-			
 		</aui:script>
 	</c:if>
 </c:if>
